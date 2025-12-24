@@ -81,6 +81,33 @@ void WifiBoard::StartNetwork() {
     // If no WiFi SSID is configured, enter WiFi configuration mode
     auto& ssid_manager = SsidManager::GetInstance();
     auto ssid_list = ssid_manager.GetSsidList();
+
+    // /* add << */
+    // // 直接指定要连接的WiFi名称和密码
+    // // const std::string target_ssid = "YTO-GUEST";
+    // // const std::string target_password = "yto.net.cn";
+    // const std::string target_ssid = "YTO";
+    // const std::string target_password = "yto#20000528";
+    // // 检查目标网络是否已存在
+    // bool target_exists = false;
+    // // 检查并移除所有非目标网络
+    // for (int i = ssid_list.size() - 1; i >= 0; i--) {
+    //     if (ssid_list[i].ssid == target_ssid) {
+    //         target_exists = true;
+    //     } else {
+    //         // 删除非目标网络（使用索引）
+    //         ssid_manager.RemoveSsid(i);
+    //     }
+    // }
+    // // 如果目标网络不存在，添加它
+    // if (!target_exists) {
+    //     ssid_manager.AddSsid(target_ssid, target_password);
+    // }
+    // // 重新获取SSID列表（现在只包含目标网络）
+    // ssid_list = ssid_manager.GetSsidList();
+    // /* >> add */
+
+
     if (ssid_list.empty()) {
         wifi_config_mode_ = true;
         EnterWifiConfigMode();

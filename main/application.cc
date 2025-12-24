@@ -17,6 +17,19 @@
 #include <arpa/inet.h>
 #include <font_awesome.h>
 
+#include <esp_http_client.h>
+
+#include "nvs_flash.h"
+#include "nvs.h"
+#include <time.h>
+// #include "http_client.h"
+
+#include "ble_wifi_integration.h"
+#include "ble_ota.h"
+#include <ssid_manager.h>
+#include <font_awesome.h>
+
+
 #define TAG "Application"
 
 
@@ -345,6 +358,14 @@ void Application::StopListening() {
     });
 }
 
+bool IsWifiConfigMode() {
+    auto& ssid_manager = SsidManager::GetInstance();
+    auto ssid_list = ssid_manager.GetSsidList();
+    Settings settings("wifi", true);
+    return settings.GetInt("force_ap") == 1 || ssid_list.empty();
+}
+
+
 void Application::Start() {
     auto& board = Board::GetInstance();
     SetDeviceState(kDeviceStateStarting);
@@ -381,18 +402,66 @@ void Application::Start() {
     /* Start the clock timer to update the status bar */
     esp_timer_start_periodic(clock_timer_handle_, 1000000);
 
+
+
+    if (IsWifiConfigMode() && ble_wifi_config_enabled_) {
+        BleWifiIntegration::StartBleWifiConfig();
+        
+        // 同时启动BLE OTA功能
+        auto& ble_ota = BleOta::GetInstance();
+        if (ble_ota.Initialize()) {
+            ESP_LOGI(TAG, "BLE OTA service initialized successfully");
+            
+            // 设置OTA进度回调（可选）
+            ble_ota.SetProgressCallback([](int progress) {
+                ESP_LOGI(TAG, "BLE OTA progress: %d%%", progress);
+            });
+            
+            // 设置OTA完成回调（可选）
+            ble_ota.SetCompleteCallback([](bool success) {
+                if (success) {
+                    ESP_LOGI(TAG, "BLE OTA completed successfully, restarting...");
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    esp_restart();
+                } else {
+                    ESP_LOGE(TAG, "BLE OTA failed");
+                }
+            });
+        } else {
+            ESP_LOGE(TAG, "Failed to initialize BLE OTA service");
+        }
+    }
+
+
     /* Wait for the network to be ready */
     board.StartNetwork();
 
     // Update the status bar immediately to show the network state
     display->UpdateStatusBar(true);
 
+
+
+    // 等待网络连接稳定
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    // 转换字符后，使用HTTP客户端方法执行GET请求
+    ESP_LOGI(TAG, "=================== HTTP Get ===================");
+    std::string device_id;
+    for (char c : SystemInfo::GetMacAddress()) {
+        if (c == ':') device_id += "%3A";
+        else device_id += c;
+    }
+    std::string get_url = "http://172.16.58.108:5000/api/v1/read/" + device_id;
+    MakeHttpGetRequest(get_url);
+
+
+
     // Check for new assets version
     CheckAssetsVersion();
 
     // Check for new firmware version or get the MQTT broker address
     Ota ota;
-    CheckNewVersion(ota);
+    // CheckNewVersion(ota);
 
     // Initialize the protocol
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
@@ -402,14 +471,15 @@ void Application::Start() {
     mcp_server.AddCommonTools();
     mcp_server.AddUserOnlyTools();
 
-    if (ota.HasMqttConfig()) {
-        protocol_ = std::make_unique<MqttProtocol>();
-    } else if (ota.HasWebsocketConfig()) {
-        protocol_ = std::make_unique<WebsocketProtocol>();
-    } else {
-        ESP_LOGW(TAG, "No protocol specified in the OTA config, using MQTT");
-        protocol_ = std::make_unique<MqttProtocol>();
-    }
+    // if (ota.HasMqttConfig()) {
+    //     protocol_ = std::make_unique<MqttProtocol>();
+    // } else if (ota.HasWebsocketConfig()) {
+    //     protocol_ = std::make_unique<WebsocketProtocol>();
+    // } else {
+    //     ESP_LOGW(TAG, "No protocol specified in the OTA config, using MQTT");
+    //     protocol_ = std::make_unique<MqttProtocol>();
+    // }
+    protocol_ = std::make_unique<WebsocketProtocol>();
 
     protocol_->OnConnected([this]() {
         DismissAlert();
@@ -440,6 +510,8 @@ void Application::Start() {
         });
     });
     protocol_->OnIncomingJson([this, display](const cJSON* root) {
+        char* json_str = cJSON_PrintUnformatted(root);
+        ESP_LOGI(TAG, "Received JSON ============> %s", json_str);
         // Parse JSON data
         auto type = cJSON_GetObjectItem(root, "type");
         if (strcmp(type->valuestring, "tts") == 0) {
@@ -503,6 +575,34 @@ void Application::Start() {
                     ESP_LOGW(TAG, "Unknown system command: %s", command->valuestring);
                 }
             }
+        } else if (strcmp(type->valuestring, "shake") == 0) {
+            auto payload = cJSON_GetObjectItem(root, "payload");
+            if (cJSON_IsObject(payload)) {
+                std::unique_ptr<char, decltype(&cJSON_free)> payload_json(cJSON_PrintUnformatted(payload), &cJSON_free);
+                std::string payload_str(payload_json.get());
+
+                // 获取 shake_num 和 message 字段
+                auto shake_num = cJSON_GetObjectItem(payload, "shake_num");
+                auto message = cJSON_GetObjectItem(payload, "message");
+
+                if (cJSON_IsNumber(shake_num) && cJSON_IsString(message)) {
+                    int shake_value = shake_num->valueint;
+                    const char* message_text = message->valuestring;
+                    
+                    ESP_LOGI(TAG, "Shake number: %d, Message: %s", shake_value, message_text);
+                }
+
+                // // 从服务端接收消息，并改变表情（现在不需要服务端再发送回来，所以此处逻辑先注释）
+                // auto& board = Board::GetInstance();
+                // auto display = board.GetDisplay();
+                // // 改变状态、表情，5秒后恢复正常表情
+                // display->SetStatus(Lang::Strings::STANDBY);
+                // display->SetEmotion("sad"); // 设置伤心表情
+                // vTaskDelay(pdMS_TO_TICKS(5000));    // 等待5秒
+                // display->SetEmotion("neutral"); // 恢复常态表情
+            } else {
+                ESP_LOGW(TAG, "Invalid custom message format: missing payload");
+            }
         } else if (strcmp(type->valuestring, "alert") == 0) {
             auto status = cJSON_GetObjectItem(root, "status");
             auto message = cJSON_GetObjectItem(root, "message");
@@ -540,6 +640,8 @@ void Application::Start() {
         display->SetChatMessage("system", "");
         // Play the success sound to indicate the device is ready
         audio_service_.PlaySound(Lang::Sounds::OGG_SUCCESS);
+
+        is_started_ = true;
     }
 }
 
@@ -870,3 +972,511 @@ void Application::SetAecMode(AecMode mode) {
 void Application::PlaySound(const std::string_view& sound) {
     audio_service_.PlaySound(sound);
 }
+
+
+
+/**
+ * @brief 发送传感器事件
+ * 
+ * @param message 文本信息
+ */
+void Application::SendSensorEvent(const std::string& message) {
+    Schedule([this, message]() {
+        // 初始化NVS
+        nvs_handle_t nvs_handle;
+        esp_err_t err = nvs_open("shake_sensor", NVS_READWRITE, &nvs_handle);
+        
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to open NVS: %s", esp_err_to_name(err));
+            return;
+        }
+        
+        // 获取当前日期
+        time_t now = 0;
+        struct tm timeinfo = {0};
+        char current_date[11] = {0}; // YYYY-MM-DD
+        
+        time(&now);
+        localtime_r(&now, &timeinfo);
+        strftime(current_date, sizeof(current_date), "%Y-%m-%d", &timeinfo);
+        
+        ESP_LOGI(TAG, "Current date: %s", current_date);
+        
+        // 从NVS读取上次摇晃的日期
+        char last_shake_date[11] = {0};
+        size_t required_size = 0;
+        
+        // 先获取存储的字符串长度
+        esp_err_t ret = nvs_get_str(nvs_handle, "last_shake_date", NULL, &required_size);
+        
+        if (ret == ESP_OK && required_size > 0) {
+            // 读取存储的日期
+            nvs_get_str(nvs_handle, "last_shake_date", last_shake_date, &required_size);
+            ESP_LOGI(TAG, "Last shake date from NVS: %s", last_shake_date);
+        }
+        
+        // 判断是否是当天首次摇晃
+        bool is_first_shake = false;
+        if (required_size == 0 || strcmp(last_shake_date, current_date) != 0) {
+            // 首次摇晃：没有存储日期或日期不同
+            ESP_LOGI(TAG, "今日首次摇晃");
+            is_first_shake = true;
+            
+            // 更新存储的日期为今天
+            nvs_set_str(nvs_handle, "last_shake_date", current_date);
+            nvs_commit(nvs_handle);
+        } else {
+            // 非首次摇晃
+            ESP_LOGI(TAG, "非首次摇晃");
+            is_first_shake = false;
+        }
+        
+        nvs_close(nvs_handle);
+        
+
+                
+        if (is_first_shake) {
+            std::string device_id = SystemInfo::GetMacAddress();
+            std::string client_id = Board::GetInstance().GetUuid();
+            
+            /*
+            // 构建包含首次标记的JSON
+            cJSON* root = cJSON_CreateObject();
+            cJSON_AddStringToObject(root, "type", "shake");
+            cJSON_AddStringToObject(root, "device_id", device_id.c_str());
+            cJSON_AddStringToObject(root, "client_id", client_id.c_str());
+            
+            cJSON* payload = cJSON_CreateObject();
+            cJSON_AddStringToObject(payload, "message", message.c_str());
+            cJSON_AddBoolToObject(payload, "is_first_shake", is_first_shake);
+            cJSON_AddStringToObject(payload, "current_date", current_date);
+            cJSON_AddItemToObject(root, "payload", payload);
+            
+            char* json_str = cJSON_PrintUnformatted(root);
+            std::string json_text(json_str);
+            */
+
+
+            // 发送传感器事件到协议（无论协议是否已连接）
+            if (!protocol_) {
+                ESP_LOGE(TAG, "Protocol not initialized");
+                return;
+            }
+            
+            // 检查协议是否已连接
+            if (!protocol_->IsConnected()) {
+                ESP_LOGW(TAG, "Protocol not connected, attempting to connect...");
+                
+                if (protocol_->OpenAudioChannel()) {
+                    ESP_LOGI(TAG, "Connected successfully, sending sensor event");
+                    MakeHttpPostRequest("摇晃", 1, device_id.c_str());
+                    // http_client_->PostMetric("摇晃", 1, device_id.c_str());
+                } else {
+                    ESP_LOGE(TAG, "Failed to connect to protocol, cannot send sensor event");
+                }
+            } else {
+                // 协议已连接，直接发送
+                ESP_LOGI(TAG, "Protocol already connected, sending sensor event directly");
+                MakeHttpPostRequest("摇晃", 1, device_id.c_str());
+                // http_client_->PostMetric("摇晃", 1, device_id.c_str());
+            }
+        }
+
+
+    });
+}
+
+/**
+ * @brief 发送 HTTP GET 请求
+ * 
+ * @param url GET请求URL（可选，使用默认值）
+ * @return true 请求成功
+ * @return false 请求失败
+ */
+bool Application::MakeHttpGetRequest(const std::string& url) {
+    ESP_LOGI(TAG, "Making HTTP GET request to: %s", url.c_str());
+    return MakeHttpRequest(url, "GET", "", "");
+}
+
+/**
+ * @brief 发送 HTTP POST 请求
+ * 
+ * @param url 请求 URL
+ * @param json_data JSON格式的请求体
+ * @return true 请求成功
+ * @return false 请求失败
+ */
+bool Application::MakeHttpPostRequest(const std::string& url, const std::string& json_data) {
+    ESP_LOGI(TAG, "Making HTTP POST request to: %s", url.c_str());
+    ESP_LOGI(TAG, "POST data: %s", json_data.c_str());
+    return MakeHttpRequest(url, "POST", "application/json", json_data);
+}
+
+/**
+ * @brief 发送 HTTP POST 请求到服务器（发送指标数据）
+ * 
+ * @param metric_name 指标名称
+ * @param metric_value 指标值
+ * @param user_id 用户ID
+ * @param post_url POST请求URL（可选，使用默认值）
+ * @return true 发送成功
+ * @return false 发送失败
+ */
+bool Application::MakeHttpPostRequest(const std::string& metric_name,
+                                     int metric_value,
+                                     const std::string& user_id,
+                                     const std::string& post_url) {
+    bool success = false;
+    
+    ESP_LOGI(TAG, "=================== HTTP Post ===================");
+    ESP_LOGI(TAG, "Sending data - Metric: %s, Value: %d, User: %s",
+             metric_name.c_str(), metric_value, user_id.c_str());
+    
+    // 创建JSON数据
+    cJSON *post_json = cJSON_CreateObject();
+    if (!post_json) {
+        ESP_LOGE(TAG, "Failed to create JSON object");
+        return false;
+    }
+    
+    // 添加JSON字段
+    cJSON_AddStringToObject(post_json, "metric_name", metric_name.c_str());
+    cJSON_AddNumberToObject(post_json, "metric_value", metric_value);
+    cJSON_AddStringToObject(post_json, "user_id", user_id.c_str());
+    
+    // 生成JSON字符串
+    char *post_data = cJSON_PrintUnformatted(post_json);
+    if (post_data) {
+        ESP_LOGI(TAG, "JSON data: %s", post_data);
+        
+        // 发送HTTP请求
+        success = MakeHttpRequest(post_url, "POST", "application/json", post_data);
+        
+        if (success) {
+            ESP_LOGI(TAG, "HTTP POST request sent successfully");
+        } else {
+            ESP_LOGE(TAG, "Failed to send HTTP POST request");
+        }
+        
+        // 释放内存
+        free(post_data);
+    } else {
+        ESP_LOGE(TAG, "Failed to generate JSON string");
+    }
+    
+    // 清理JSON对象
+    cJSON_Delete(post_json);
+    
+    ESP_LOGI(TAG, "=================== HTTP Post End ===============");
+    return success;
+}
+
+/**
+ * @brief HTTP 事件处理器
+ */
+esp_err_t Application::HttpEventHandler(esp_http_client_event_t *evt) {
+    Application *app = static_cast<Application*>(evt->user_data);
+    if (!app) {
+        return ESP_FAIL;
+    }
+    
+    switch(evt->event_id) {
+        case HTTP_EVENT_ON_DATA:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+            if (evt->data) {
+                // 将响应数据追加到 current_http_response
+                app->current_http_response.append((char*)evt->data, evt->data_len);
+            }
+            break;
+        case HTTP_EVENT_ERROR:
+            ESP_LOGE(TAG, "HTTP_EVENT_ERROR");
+            break;
+        case HTTP_EVENT_ON_FINISH:
+            ESP_LOGI(TAG, "HTTP_EVENT_ON_FINISH");
+            break;
+        default:
+            // 其他事件不处理
+            break;
+    }
+    return ESP_OK;
+}
+
+/**
+ * @brief 静态HTTP事件处理器
+ */
+static esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
+    if (evt->user_data) {
+        Application *app = static_cast<Application*>(evt->user_data);
+        return app->HttpEventHandler(evt);
+    }
+    return ESP_OK;
+}
+
+/**
+ * @brief 统一的 HTTP 请求方法
+ * 
+ * @param url 请求 URL
+ * @param method 请求方法（"GET"、"POST"、"PUT"、"DELETE"）
+ * @param content_type 请求内容类型
+ * @param body 请求体内容（POST/PUT时使用）
+ * @return true 请求成功（HTTP 2xx状态码）
+ * @return false 请求失败
+ */
+bool Application::MakeHttpRequest(const std::string& url, const std::string& method,
+                                 const std::string& content_type, const std::string& body) {
+    bool success = false;
+    std::string response_data;
+    
+    // 配置结构体
+    esp_http_client_config_t config = {};
+    config.url = url.c_str();
+    config.method = HTTP_METHOD_GET; // 默认，下面会根据方法调整
+    config.timeout_ms = 10000;
+    config.disable_auto_redirect = false;
+    config.buffer_size = 4096;
+    config.buffer_size_tx = 2048;
+    config.event_handler = _http_event_handler;
+    config.user_data = static_cast<void*>(this);
+    
+    // 根据方法设置HTTP方法
+    if (method == "POST") {
+        config.method = HTTP_METHOD_POST;
+    } else if (method == "PUT") {
+        config.method = HTTP_METHOD_PUT;
+    } else if (method == "DELETE") {
+        config.method = HTTP_METHOD_DELETE;
+    } else {
+        config.method = HTTP_METHOD_GET;
+    }
+    
+    // 初始化客户端
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (!client) {
+        ESP_LOGE(TAG, "Failed to initialize HTTP client for URL: %s", url.c_str());
+        return false;
+    }
+    
+    // 设置请求头
+    if (!content_type.empty()) {
+        esp_http_client_set_header(client, "Content-Type", content_type.c_str());
+    }
+    
+    // 添加必要的请求头
+    esp_http_client_set_header(client, "User-Agent", "ESP32-HTTP-Client");
+    esp_http_client_set_header(client, "Accept", "*/*");
+    esp_http_client_set_header(client, "Connection", "close");
+    
+    // 对于POST/PUT请求，设置请求体
+    if ((method == "POST" || method == "PUT") && !body.empty()) {
+        esp_http_client_set_post_field(client, body.c_str(), body.length());
+    }
+    
+    // 清空当前响应
+    current_http_response.clear();
+    
+    // 执行请求
+    esp_err_t err = esp_http_client_perform(client);
+    
+    if (err == ESP_OK) {
+        int status_code = esp_http_client_get_status_code(client);
+        ESP_LOGI(TAG, "HTTP Status Code: %d", status_code);
+        
+        // 判断是否成功 (2xx 状态码表示成功)
+        if (status_code >= 200 && status_code < 300) {
+            success = true;
+        }
+        
+        // 获取响应长度
+        int content_length = esp_http_client_get_content_length(client);
+        ESP_LOGI(TAG, "Content length: %d", content_length);
+        
+        // 如果事件处理器没有收集到数据，尝试直接读取
+        if (current_http_response.empty() && content_length > 0) {
+            char *buffer = (char *)malloc(content_length + 1);
+            if (buffer) {
+                int read_len = esp_http_client_read(client, buffer, content_length);
+                if (read_len > 0) {
+                    buffer[read_len] = '\0';
+                    current_http_response.assign(buffer, read_len);
+                }
+                free(buffer);
+            }
+        }
+        
+        // 处理响应数据
+        if (!current_http_response.empty()) {
+            response_data = current_http_response;
+            ProcessHttpResponse(response_data);
+        } else {
+            ESP_LOGW(TAG, "No response body received");
+        }
+        
+        if (!success) {
+            ESP_LOGE(TAG, "HTTP request failed with status: %d", status_code);
+        }
+    } else {
+        ESP_LOGE(TAG, "HTTP %s request failed: %s", method.c_str(), esp_err_to_name(err));
+        
+        // 获取错误详情
+        int esp_tls_last_error = esp_http_client_get_errno(client);
+        if (esp_tls_last_error != 0) {
+            ESP_LOGE(TAG, "HTTP client error: %s", strerror(esp_tls_last_error));
+        }
+    }
+    
+    esp_http_client_cleanup(client);
+    return success;
+}
+
+/**
+ * @brief 处理HTTP响应数据
+ * 
+ * @param response_data 响应数据
+ */
+void Application::ProcessHttpResponse(const std::string& response_data) {
+    if (response_data.empty()) {
+        return;
+    }
+    
+    ESP_LOGI(TAG, "HTTP Response (length: %zu bytes):", response_data.length());
+    
+    // 安全打印响应内容
+    int print_len = response_data.length();
+    if (print_len > 1024) {
+        print_len = 1024;
+    }
+    
+    // 打印响应前1024个字符
+    for (int i = 0; i < print_len; i++) {
+        if (i % 160 == 0 && i > 0) {
+            printf("\n");
+        }
+        char c = response_data[i];
+        if (c >= 32 && c <= 126) {
+            printf("%c", c);
+        } else {
+            printf(".");
+        }
+    }
+    printf("\n");
+    
+    // 尝试解析JSON响应
+    cJSON *json = cJSON_Parse(response_data.c_str());
+    if (json) {
+        // 提取message字段
+        cJSON *message = cJSON_GetObjectItem(json, "message");
+        if (cJSON_IsString(message) && message->valuestring) {
+            ESP_LOGI(TAG, "Response message: %s", message->valuestring);
+        }
+        
+        // 检查是否有current_date字段并设置系统时间
+        bool time_set = false;
+        cJSON *current_date = cJSON_GetObjectItem(json, "current_date");
+        if (cJSON_IsString(current_date) && current_date->valuestring) {
+            ESP_LOGI(TAG, "Found current_date field: %s", current_date->valuestring);
+            if (SetSystemTimeFromString(current_date->valuestring)) {
+                ESP_LOGI(TAG, "System time set successfully from server");
+                time_set = true;
+            } else {
+                ESP_LOGE(TAG, "Failed to set system time from server");
+            }
+        }
+        
+        // 提取data字段
+        cJSON *data = cJSON_GetObjectItem(json, "data");
+        if (data && cJSON_IsObject(data)) {
+            ESP_LOGI(TAG, "Response data fields:");
+            
+            // 遍历所有数据字段
+            cJSON *child = data->child;
+            while (child) {
+                if (cJSON_IsString(child) && child->valuestring) {
+                    // ESP_LOGI(TAG, "  %s: %s", child->string, child->valuestring);
+                    ESP_LOGI(TAG, "  %*s: %s", 20, child->string, child->valuestring);
+                    
+                    // 检查data对象中是否也有current_date字段
+                    if (strcmp(child->string, "current_date") == 0 && !time_set) {
+                        ESP_LOGI(TAG, "Found current_date in data field: %s", child->valuestring);
+                        if (SetSystemTimeFromString(child->valuestring)) {
+                            ESP_LOGI(TAG, "System time set successfully from server data field");
+                        } else {
+                            ESP_LOGE(TAG, "Failed to set system time from server data field");
+                        }
+                    }
+                } else if (cJSON_IsNumber(child)) {
+                    // ESP_LOGI(TAG, "  %s: %d", child->string, child->valueint);
+                    ESP_LOGI(TAG, "  %*s: %d", 20, child->string, child->valueint);
+                } else if (cJSON_IsBool(child)) {
+                    // ESP_LOGI(TAG, "  %s: %s", child->string, cJSON_IsTrue(child) ? "true" : "false");
+                    ESP_LOGI(TAG, "  %*s: %s", 20, child->string, cJSON_IsTrue(child) ? "true" : "false");
+                }
+                child = child->next;
+            }
+        }
+        cJSON_Delete(json);
+    } else {
+        ESP_LOGI(TAG, "Response is not valid JSON or parse failed");
+    }
+}
+
+/**
+ * @brief 设置系统时间
+ * 
+ * @param time_str 时间字符串，格式为"YYYY-MM-DD HH:MM:SS"
+ * @return true 设置成功
+ * @return false 设置失败
+ */
+bool Application::SetSystemTimeFromString(const char* time_str) {
+    struct tm tm_time;
+    memset(&tm_time, 0, sizeof(tm_time));
+    
+    // 使用 sscanf 解析时间字符串
+    int year, month, day, hour, minute, second;
+    
+    if (sscanf(time_str, "%d-%d-%d %d:%d:%d", 
+               &year, &month, &day, &hour, &minute, &second) != 6) {
+        ESP_LOGE(TAG, "Invalid time format: %s", time_str);
+        return false;
+    }
+    
+    // 设置 tm 结构体
+    tm_time.tm_year = year - 1900;  // 年份从1900开始
+    tm_time.tm_mon = month - 1;     // 月份 0-11
+    tm_time.tm_mday = day;
+    tm_time.tm_hour = hour;
+    tm_time.tm_min = minute;
+    tm_time.tm_sec = second;
+    tm_time.tm_isdst = -1;  // 自动判断夏令时
+    
+    // 转换为 time_t
+    time_t t = mktime(&tm_time);
+    if (t == -1) {
+        ESP_LOGE(TAG, "Failed to convert time");
+        return false;
+    }
+    
+    // 设置系统时间
+    struct timeval tv;
+    tv.tv_sec = t;
+    tv.tv_usec = 0;
+    
+    if (settimeofday(&tv, NULL) != 0) {
+        ESP_LOGE(TAG, "Failed to set system time");
+        return false;
+    }
+    
+    ESP_LOGI(TAG, "System time set to: %s", time_str);
+    
+    // 打印当前时间以验证
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    
+    char time_buffer[32];
+    strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
+    ESP_LOGI(TAG, "Current system time is: %s", time_buffer);
+    
+    return true;
+}
+

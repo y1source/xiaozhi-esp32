@@ -36,9 +36,16 @@ set(SOURCES "audio/audio_codec.cc"
             "device_state_event.cc"
             "assets.cc"
             "main.cc"
+            
+            "ble/esp_ble.c"
+            "ble/ble_protocol.c"
+            "ble/ble_wifi_config.cc"
+            "ble/ble_wifi_integration.cc"
+            "ble/ble_ota.c"
+            "ble/ble_ota.cc"
             )
 
-set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "protocols")
+set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "protocols" "ble")
 
 # Add board common files
 file(GLOB BOARD_COMMON_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/boards/common/*.cc)

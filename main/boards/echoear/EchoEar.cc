@@ -24,196 +24,16 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
+#include <cmath>
+#include "assets/lang_config.h"
+
+#include "bmi270_config.h"
+#include "st77916_config.h"
+
 #define TAG "EchoEar"
 
-
 temperature_sensor_handle_t temp_sensor = NULL;
-static const st77916_lcd_init_cmd_t vendor_specific_init_yysj[] = {
-    {0xF0, (uint8_t []){0x28}, 1, 0},
-    {0xF2, (uint8_t []){0x28}, 1, 0},
-    {0x73, (uint8_t []){0xF0}, 1, 0},
-    {0x7C, (uint8_t []){0xD1}, 1, 0},
-    {0x83, (uint8_t []){0xE0}, 1, 0},
-    {0x84, (uint8_t []){0x61}, 1, 0},
-    {0xF2, (uint8_t []){0x82}, 1, 0},
-    {0xF0, (uint8_t []){0x00}, 1, 0},
-    {0xF0, (uint8_t []){0x01}, 1, 0},
-    {0xF1, (uint8_t []){0x01}, 1, 0},
-    {0xB0, (uint8_t []){0x56}, 1, 0},
-    {0xB1, (uint8_t []){0x4D}, 1, 0},
-    {0xB2, (uint8_t []){0x24}, 1, 0},
-    {0xB4, (uint8_t []){0x87}, 1, 0},
-    {0xB5, (uint8_t []){0x44}, 1, 0},
-    {0xB6, (uint8_t []){0x8B}, 1, 0},
-    {0xB7, (uint8_t []){0x40}, 1, 0},
-    {0xB8, (uint8_t []){0x86}, 1, 0},
-    {0xBA, (uint8_t []){0x00}, 1, 0},
-    {0xBB, (uint8_t []){0x08}, 1, 0},
-    {0xBC, (uint8_t []){0x08}, 1, 0},
-    {0xBD, (uint8_t []){0x00}, 1, 0},
-    {0xC0, (uint8_t []){0x80}, 1, 0},
-    {0xC1, (uint8_t []){0x10}, 1, 0},
-    {0xC2, (uint8_t []){0x37}, 1, 0},
-    {0xC3, (uint8_t []){0x80}, 1, 0},
-    {0xC4, (uint8_t []){0x10}, 1, 0},
-    {0xC5, (uint8_t []){0x37}, 1, 0},
-    {0xC6, (uint8_t []){0xA9}, 1, 0},
-    {0xC7, (uint8_t []){0x41}, 1, 0},
-    {0xC8, (uint8_t []){0x01}, 1, 0},
-    {0xC9, (uint8_t []){0xA9}, 1, 0},
-    {0xCA, (uint8_t []){0x41}, 1, 0},
-    {0xCB, (uint8_t []){0x01}, 1, 0},
-    {0xD0, (uint8_t []){0x91}, 1, 0},
-    {0xD1, (uint8_t []){0x68}, 1, 0},
-    {0xD2, (uint8_t []){0x68}, 1, 0},
-    {0xF5, (uint8_t []){0x00, 0xA5}, 2, 0},
-    {0xDD, (uint8_t []){0x4F}, 1, 0},
-    {0xDE, (uint8_t []){0x4F}, 1, 0},
-    {0xF1, (uint8_t []){0x10}, 1, 0},
-    {0xF0, (uint8_t []){0x00}, 1, 0},
-    {0xF0, (uint8_t []){0x02}, 1, 0},
-    {0xE0, (uint8_t []){0xF0, 0x0A, 0x10, 0x09, 0x09, 0x36, 0x35, 0x33, 0x4A, 0x29, 0x15, 0x15, 0x2E, 0x34}, 14, 0},
-    {0xE1, (uint8_t []){0xF0, 0x0A, 0x0F, 0x08, 0x08, 0x05, 0x34, 0x33, 0x4A, 0x39, 0x15, 0x15, 0x2D, 0x33}, 14, 0},
-    {0xF0, (uint8_t []){0x10}, 1, 0},
-    {0xF3, (uint8_t []){0x10}, 1, 0},
-    {0xE0, (uint8_t []){0x07}, 1, 0},
-    {0xE1, (uint8_t []){0x00}, 1, 0},
-    {0xE2, (uint8_t []){0x00}, 1, 0},
-    {0xE3, (uint8_t []){0x00}, 1, 0},
-    {0xE4, (uint8_t []){0xE0}, 1, 0},
-    {0xE5, (uint8_t []){0x06}, 1, 0},
-    {0xE6, (uint8_t []){0x21}, 1, 0},
-    {0xE7, (uint8_t []){0x01}, 1, 0},
-    {0xE8, (uint8_t []){0x05}, 1, 0},
-    {0xE9, (uint8_t []){0x02}, 1, 0},
-    {0xEA, (uint8_t []){0xDA}, 1, 0},
-    {0xEB, (uint8_t []){0x00}, 1, 0},
-    {0xEC, (uint8_t []){0x00}, 1, 0},
-    {0xED, (uint8_t []){0x0F}, 1, 0},
-    {0xEE, (uint8_t []){0x00}, 1, 0},
-    {0xEF, (uint8_t []){0x00}, 1, 0},
-    {0xF8, (uint8_t []){0x00}, 1, 0},
-    {0xF9, (uint8_t []){0x00}, 1, 0},
-    {0xFA, (uint8_t []){0x00}, 1, 0},
-    {0xFB, (uint8_t []){0x00}, 1, 0},
-    {0xFC, (uint8_t []){0x00}, 1, 0},
-    {0xFD, (uint8_t []){0x00}, 1, 0},
-    {0xFE, (uint8_t []){0x00}, 1, 0},
-    {0xFF, (uint8_t []){0x00}, 1, 0},
-    {0x60, (uint8_t []){0x40}, 1, 0},
-    {0x61, (uint8_t []){0x04}, 1, 0},
-    {0x62, (uint8_t []){0x00}, 1, 0},
-    {0x63, (uint8_t []){0x42}, 1, 0},
-    {0x64, (uint8_t []){0xD9}, 1, 0},
-    {0x65, (uint8_t []){0x00}, 1, 0},
-    {0x66, (uint8_t []){0x00}, 1, 0},
-    {0x67, (uint8_t []){0x00}, 1, 0},
-    {0x68, (uint8_t []){0x00}, 1, 0},
-    {0x69, (uint8_t []){0x00}, 1, 0},
-    {0x6A, (uint8_t []){0x00}, 1, 0},
-    {0x6B, (uint8_t []){0x00}, 1, 0},
-    {0x70, (uint8_t []){0x40}, 1, 0},
-    {0x71, (uint8_t []){0x03}, 1, 0},
-    {0x72, (uint8_t []){0x00}, 1, 0},
-    {0x73, (uint8_t []){0x42}, 1, 0},
-    {0x74, (uint8_t []){0xD8}, 1, 0},
-    {0x75, (uint8_t []){0x00}, 1, 0},
-    {0x76, (uint8_t []){0x00}, 1, 0},
-    {0x77, (uint8_t []){0x00}, 1, 0},
-    {0x78, (uint8_t []){0x00}, 1, 0},
-    {0x79, (uint8_t []){0x00}, 1, 0},
-    {0x7A, (uint8_t []){0x00}, 1, 0},
-    {0x7B, (uint8_t []){0x00}, 1, 0},
-    {0x80, (uint8_t []){0x48}, 1, 0},
-    {0x81, (uint8_t []){0x00}, 1, 0},
-    {0x82, (uint8_t []){0x06}, 1, 0},
-    {0x83, (uint8_t []){0x02}, 1, 0},
-    {0x84, (uint8_t []){0xD6}, 1, 0},
-    {0x85, (uint8_t []){0x04}, 1, 0},
-    {0x86, (uint8_t []){0x00}, 1, 0},
-    {0x87, (uint8_t []){0x00}, 1, 0},
-    {0x88, (uint8_t []){0x48}, 1, 0},
-    {0x89, (uint8_t []){0x00}, 1, 0},
-    {0x8A, (uint8_t []){0x08}, 1, 0},
-    {0x8B, (uint8_t []){0x02}, 1, 0},
-    {0x8C, (uint8_t []){0xD8}, 1, 0},
-    {0x8D, (uint8_t []){0x04}, 1, 0},
-    {0x8E, (uint8_t []){0x00}, 1, 0},
-    {0x8F, (uint8_t []){0x00}, 1, 0},
-    {0x90, (uint8_t []){0x48}, 1, 0},
-    {0x91, (uint8_t []){0x00}, 1, 0},
-    {0x92, (uint8_t []){0x0A}, 1, 0},
-    {0x93, (uint8_t []){0x02}, 1, 0},
-    {0x94, (uint8_t []){0xDA}, 1, 0},
-    {0x95, (uint8_t []){0x04}, 1, 0},
-    {0x96, (uint8_t []){0x00}, 1, 0},
-    {0x97, (uint8_t []){0x00}, 1, 0},
-    {0x98, (uint8_t []){0x48}, 1, 0},
-    {0x99, (uint8_t []){0x00}, 1, 0},
-    {0x9A, (uint8_t []){0x0C}, 1, 0},
-    {0x9B, (uint8_t []){0x02}, 1, 0},
-    {0x9C, (uint8_t []){0xDC}, 1, 0},
-    {0x9D, (uint8_t []){0x04}, 1, 0},
-    {0x9E, (uint8_t []){0x00}, 1, 0},
-    {0x9F, (uint8_t []){0x00}, 1, 0},
-    {0xA0, (uint8_t []){0x48}, 1, 0},
-    {0xA1, (uint8_t []){0x00}, 1, 0},
-    {0xA2, (uint8_t []){0x05}, 1, 0},
-    {0xA3, (uint8_t []){0x02}, 1, 0},
-    {0xA4, (uint8_t []){0xD5}, 1, 0},
-    {0xA5, (uint8_t []){0x04}, 1, 0},
-    {0xA6, (uint8_t []){0x00}, 1, 0},
-    {0xA7, (uint8_t []){0x00}, 1, 0},
-    {0xA8, (uint8_t []){0x48}, 1, 0},
-    {0xA9, (uint8_t []){0x00}, 1, 0},
-    {0xAA, (uint8_t []){0x07}, 1, 0},
-    {0xAB, (uint8_t []){0x02}, 1, 0},
-    {0xAC, (uint8_t []){0xD7}, 1, 0},
-    {0xAD, (uint8_t []){0x04}, 1, 0},
-    {0xAE, (uint8_t []){0x00}, 1, 0},
-    {0xAF, (uint8_t []){0x00}, 1, 0},
-    {0xB0, (uint8_t []){0x48}, 1, 0},
-    {0xB1, (uint8_t []){0x00}, 1, 0},
-    {0xB2, (uint8_t []){0x09}, 1, 0},
-    {0xB3, (uint8_t []){0x02}, 1, 0},
-    {0xB4, (uint8_t []){0xD9}, 1, 0},
-    {0xB5, (uint8_t []){0x04}, 1, 0},
-    {0xB6, (uint8_t []){0x00}, 1, 0},
-    {0xB7, (uint8_t []){0x00}, 1, 0},
-    {0xB8, (uint8_t []){0x48}, 1, 0},
-    {0xB9, (uint8_t []){0x00}, 1, 0},
-    {0xBA, (uint8_t []){0x0B}, 1, 0},
-    {0xBB, (uint8_t []){0x02}, 1, 0},
-    {0xBC, (uint8_t []){0xDB}, 1, 0},
-    {0xBD, (uint8_t []){0x04}, 1, 0},
-    {0xBE, (uint8_t []){0x00}, 1, 0},
-    {0xBF, (uint8_t []){0x00}, 1, 0},
-    {0xC0, (uint8_t []){0x10}, 1, 0},
-    {0xC1, (uint8_t []){0x47}, 1, 0},
-    {0xC2, (uint8_t []){0x56}, 1, 0},
-    {0xC3, (uint8_t []){0x65}, 1, 0},
-    {0xC4, (uint8_t []){0x74}, 1, 0},
-    {0xC5, (uint8_t []){0x88}, 1, 0},
-    {0xC6, (uint8_t []){0x99}, 1, 0},
-    {0xC7, (uint8_t []){0x01}, 1, 0},
-    {0xC8, (uint8_t []){0xBB}, 1, 0},
-    {0xC9, (uint8_t []){0xAA}, 1, 0},
-    {0xD0, (uint8_t []){0x10}, 1, 0},
-    {0xD1, (uint8_t []){0x47}, 1, 0},
-    {0xD2, (uint8_t []){0x56}, 1, 0},
-    {0xD3, (uint8_t []){0x65}, 1, 0},
-    {0xD4, (uint8_t []){0x74}, 1, 0},
-    {0xD5, (uint8_t []){0x88}, 1, 0},
-    {0xD6, (uint8_t []){0x99}, 1, 0},
-    {0xD7, (uint8_t []){0x01}, 1, 0},
-    {0xD8, (uint8_t []){0xBB}, 1, 0},
-    {0xD9, (uint8_t []){0xAA}, 1, 0},
-    {0xF3, (uint8_t []){0x01}, 1, 0},
-    {0xF0, (uint8_t []){0x00}, 1, 0},
-    {0x21, (uint8_t []){}, 0, 0},
-    {0x11, (uint8_t []){}, 0, 0},
-    {0x00, (uint8_t []){}, 0, 120},
-};
+
 float tsens_value;
 gpio_num_t AUDIO_I2S_GPIO_DIN = AUDIO_I2S_GPIO_DIN_1;
 gpio_num_t AUDIO_CODEC_PA_PIN = AUDIO_CODEC_PA_PIN_1;
@@ -221,6 +41,183 @@ gpio_num_t QSPI_PIN_NUM_LCD_RST = QSPI_PIN_NUM_LCD_RST_1;
 gpio_num_t TOUCH_PAD2 = TOUCH_PAD2_1;
 gpio_num_t UART1_TX = UART1_TX_1;
 gpio_num_t UART1_RX = UART1_RX_1;
+
+
+class Bmi270 : public I2cDevice {
+public:
+    struct SensorData {
+        float accel_x;
+        float accel_y;
+        float accel_z;
+        float gyro_x;
+        float gyro_y;
+        float gyro_z;
+    };
+
+    // 添加晃动检测相关状态
+    struct ShakeDetectionState {
+        bool is_shaking;
+        TickType_t shake_start_time;
+        bool shake_detected;
+    };
+
+    Bmi270(i2c_master_bus_handle_t i2c_bus, uint8_t addr) 
+        : I2cDevice(i2c_bus, addr) {
+        shake_state_.is_shaking = false;
+        shake_state_.shake_start_time = 0;
+        shake_state_.shake_detected = false;
+    }
+
+    bool Initialize() {
+        // 1.读取芯片ID（0x24）（检查通信是否正确）。接口即将配置为I2C，初始虚拟读取将其配置为SPI
+        uint8_t chip_id = ReadReg(0x00);
+        if (chip_id != 0x24) {
+            ESP_LOGE(TAG, "BMI270 init failed. Chip ID: 0x%02X", chip_id);
+            return false;
+        }
+        // 2.执行初始化序列
+        WriteReg(0x7C, 0x00);           // 禁用电源管理配置高级节能模式
+        vTaskDelay(pdMS_TO_TICKS(500)); // 等待500毫秒
+        WriteReg(0x59, 0x00);           // 准备配置加载
+        this->WriteRegs(0x5E, const_cast<uint8_t*>(bmi270_config_file), sizeof(bmi270_config_file));    // 配置文件数组向寄存器写入数据
+        WriteReg(0x59, 0x01);           // 完成配置加载
+        vTaskDelay(pdMS_TO_TICKS(500)); // 等待500毫秒
+
+        // 3.检查初始化状态是否正确
+        uint8_t status_id = ReadReg(0x21);
+        if (status_id != 1) {
+            ESP_LOGE(TAG, "BMI270 init failed. status_id: 0x%02X", status_id);
+            return false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(500));
+
+        // 4.将设备配置为性能模式
+        WriteReg(0x7D, 0x0E);   // PWR_CTRL： 获取加速度、陀螺仪和温度传感器数据。禁用辅助接口。
+        WriteReg(0x40, 0xA8);   // ACC_CONF： 启用acc_filter_perf；将acc_bwp设置为正常模式；将acc_odr设置为100HZ
+        WriteReg(0x42, 0xE9);   // GYR_CONF: 启用gyr_filter_perf；启用gyr_noise_perf；将gyr_bwp设置为正常模式；将gyr_odr设置为200Hz
+        WriteReg(0x7C, 0x02);   // PWR_CONF: 禁用adv_power_save；启用fifo
+        uint8_t buffer[12];
+        ReadRegs(0x0c, buffer, sizeof(buffer));
+        vTaskDelay(pdMS_TO_TICKS(500));
+        
+        ESP_LOGI(TAG, "BMI270 initialized");
+        return true;
+    }
+
+    SensorData ReadData() {
+        SensorData data = {0};
+        uint8_t buffer[12];
+        
+        // 读取0x0C开始的12字节数据(加速度+陀螺仪) DATA_8 ~ DATA_19
+        ReadRegs(0x0C, buffer, sizeof(buffer));
+        // ESP_LOGI(TAG, "buffer ----------> %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X", buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7], buffer[8], buffer[9], buffer[10], buffer[11]);
+        
+        // 解析加速度数据 (LSB = 8192/g)
+        data.accel_x = (int16_t)(buffer[1] << 8 | buffer[0]) / 8192.0f;
+        data.accel_y = (int16_t)(buffer[3] << 8 | buffer[2]) / 8192.0f;
+        data.accel_z = (int16_t)(buffer[5] << 8 | buffer[4]) / 8192.0f;
+        
+        // 解析陀螺仪数据 (LSB = 16.384 dps)
+        data.gyro_x = (int16_t)(buffer[7] << 8 | buffer[6]) / 16.384f;
+        data.gyro_y = (int16_t)(buffer[9] << 8 | buffer[8]) / 16.384f;
+        data.gyro_z = (int16_t)(buffer[11] << 8 | buffer[10]) / 16.384f;
+
+        // // 读取X轴数据 (Ratex = (DATA_15<<8 + DATA_14) - [GYR_CAS.factor_zx × (DATA_19<<8 + DATA_18)] / 2^9)
+        // // 提取低7位并执行符号扩展
+        // data.gyro_x = (int16_t)((buffer[7] << 8) | buffer[6]);
+        // // 读取Y轴数据 (Ratey = DATA_17<<8 + DATA_16)
+        // data.gyro_y = (int16_t)((buffer[9] << 8) | buffer[8]);
+        // // 读取Z轴数据 (Ratez = DATA_19<<8 + DATA_18)
+        // data.gyro_z = (int16_t)((buffer[11] << 8) | buffer[10]);
+
+        return data;
+    }
+
+    // 检测晃动的方法
+    bool CheckForShake(const SensorData& data, TickType_t current_time) {
+        const float shake_threshold = 100.0f; // 晃动阈值(度/秒)
+        const TickType_t min_shake_duration = pdMS_TO_TICKS(1000); // 最小晃动持续时间(1秒)
+        
+        // 检查是否超过阈值
+        bool is_currently_shaking = (fabs(data.gyro_x) > shake_threshold) ||
+                                   (fabs(data.gyro_y) > shake_threshold) ||
+                                   (fabs(data.gyro_z) > shake_threshold);
+        
+        if (is_currently_shaking) {
+            if (!shake_state_.is_shaking) {
+                // 开始晃动
+                shake_state_.is_shaking = true;
+                shake_state_.shake_start_time = current_time;
+                ESP_LOGI(TAG, "Shake started");
+            } else {
+                // 持续晃动，检查是否达到1秒
+                if (!shake_state_.shake_detected && 
+                    (current_time - shake_state_.shake_start_time >= min_shake_duration)) {
+                    shake_state_.shake_detected = true;
+                    ESP_LOGI(TAG, "Real shake detected! (lasted more than 1 seconds)");
+
+                    return true;
+                }
+            }
+        } else if (shake_state_.is_shaking) {
+            // 晃动结束
+            TickType_t shake_duration = current_time - shake_state_.shake_start_time;
+            ESP_LOGI(TAG, "Shake ended, duration: %lu ms", 
+                    (unsigned long)(shake_duration * portTICK_PERIOD_MS));
+            
+            // 重置状态
+            shake_state_.is_shaking = false;
+            shake_state_.shake_detected = false;
+        }
+        
+        return false;
+    }
+
+    static void SensorTask(void* arg) {
+        Bmi270* sensor = static_cast<Bmi270*>(arg);
+        const TickType_t delay = pdMS_TO_TICKS(200);
+
+        // 等待应用程序和协议初始化完成
+        while (!Application::GetInstance().IsStarted()) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+
+        while (true) {
+            TickType_t current_time = xTaskGetTickCount();
+            auto data = sensor->ReadData();
+            
+            // 检测晃动
+            if (sensor->CheckForShake(data, current_time)) {
+                ESP_LOGI(TAG, "Performing action for real shake detection");
+
+                Application& app = Application::GetInstance();
+                app.SendSensorEvent("检测到摇晃");
+
+                auto& board = Board::GetInstance();
+                auto display = board.GetDisplay();
+
+                // 改变状态、表情
+                display->SetStatus(Lang::Strings::STANDBY);
+                display->SetEmotion("confused");
+
+                vTaskDelay(pdMS_TO_TICKS(5000));
+
+                // 恢复正常
+                display->SetEmotion("idle");
+            }
+            
+            // // 输出传感器数据（可选，用于调试）
+            // ESP_LOGI(TAG, "Accel: X=%.2fg Y=%.2fg Z=%.2fg | Gyro: X=%.2f°/s Y=%.2f°/s Z=%.2f°/s",
+            //         data.accel_x, data.accel_y, data.accel_z,
+            //         data.gyro_x, data.gyro_y, data.gyro_z);
+            
+            vTaskDelay(delay);
+        }
+    }
+private:
+    ShakeDetectionState shake_state_;
+};
+
 
 class Charge : public I2cDevice {
 public:
@@ -391,6 +388,8 @@ private:
     esp_timer_handle_t touchpad_timer_;
     esp_lcd_touch_handle_t tp;   // LCD touch handle
 
+    Bmi270* bmi270_;
+
     void InitializeI2c()
     {
         i2c_master_bus_config_t i2c_bus_cfg = {
@@ -412,6 +411,19 @@ private:
         ESP_ERROR_CHECK(temperature_sensor_enable(temp_sensor));
 
     }
+
+    // 添加传感器初始化
+    void InitializeSensors() {
+        // 初始化BMI270 (I2C地址0x68)
+        bmi270_ = new Bmi270(i2c_bus_, 0x68);
+        if (bmi270_->Initialize()) {
+            xTaskCreatePinnedToCore(Bmi270::SensorTask, "bmi270_task", 4096, bmi270_, 5, NULL, 1);
+        } else {
+            ESP_LOGE(TAG, "Failed to initialize BMI270");
+        }
+
+    }
+
     uint8_t DetectPcbVersion()
     {
         esp_err_t ret = i2c_master_probe(i2c_bus_, 0x18, 100);
@@ -485,7 +497,7 @@ private:
             }
         }
     }
-
+    
     void InitializeCharge()
     {
         charge_ = new Charge(i2c_bus_, 0x55);
@@ -590,6 +602,8 @@ public:
         uint8_t pcb_verison = DetectPcbVersion();
         InitializeCharge();
         InitializeCst816sTouchPad();
+
+        InitializeSensors();  // 新增传感器初始化
 
         InitializeSpi();
         Initializest77916Display(pcb_verison);

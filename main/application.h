@@ -9,6 +9,7 @@
 #include <string>
 #include <mutex>
 #include <deque>
+#include <vector>
 #include <memory>
 
 #include "protocol.h"
@@ -16,6 +17,10 @@
 #include "audio_service.h"
 #include "device_state_event.h"
 
+#include "ble_wifi_config.h"
+#include "bluetooth_config.h"
+
+#include "esp_http_client.h"
 
 #define MAIN_EVENT_SCHEDULE (1 << 0)
 #define MAIN_EVENT_SEND_AUDIO (1 << 1)
@@ -64,6 +69,28 @@ public:
     void PlaySound(const std::string_view& sound);
     AudioService& GetAudioService() { return audio_service_; }
 
+    // 发送传感器事件
+    void SendSensorEvent(const std::string& event_type);
+    bool IsStarted() const { return is_started_; }
+
+    // HTTP 客户端方法
+    bool MakeHttpGetRequest(const std::string& url);
+    bool MakeHttpPostRequest(const std::string& url, const std::string& json_data);
+
+    bool MakeHttpPostRequest(const std::string& metric_name,
+                            int metric_value,
+                            const std::string& user_id,
+                            const std::string& post_url = "http://172.16.58.108:5000/api/v1/write");
+    esp_err_t HttpEventHandler(esp_http_client_event_t *evt);
+    void ProcessHttpResponse(const std::string& response_data);
+
+    // 设置系统时间
+    bool SetSystemTimeFromString(const char* time_str);
+
+    // 启动蓝牙配网功能
+    void EnableBleWifiConfig(bool enable) { ble_wifi_config_enabled_ = enable; }
+    bool IsBleWifiConfigEnabled() const { return ble_wifi_config_enabled_; }
+
 private:
     Application();
     ~Application();
@@ -90,6 +117,12 @@ private:
     void CheckAssetsVersion();
     void ShowActivationCode(const std::string& code, const std::string& message);
     void SetListeningMode(ListeningMode mode);
+
+
+    bool is_started_ = false;
+    bool MakeHttpRequest(const std::string& url, const std::string& method, const std::string& content_type, const std::string& body);
+    std::string current_http_response;
+    bool ble_wifi_config_enabled_ = true;
 };
 
 

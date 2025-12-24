@@ -1,6 +1,8 @@
 #include "i2c_device.h"
 
 #include <esp_log.h>
+#include <cstring>
+#include <vector>
 
 #define TAG "I2cDevice"
 
@@ -22,6 +24,27 @@ I2cDevice::I2cDevice(i2c_master_bus_handle_t i2c_bus, uint8_t addr) {
 void I2cDevice::WriteReg(uint8_t reg, uint8_t value) {
     uint8_t buffer[2] = {reg, value};
     ESP_ERROR_CHECK(i2c_master_transmit(i2c_device_, buffer, 2, 100));
+}
+
+
+/**
+ * @brief 向I2C设备寄存器写入多个字节数据。内部使用临时缓冲区将寄存器地址和数据合并后一次性发送。
+ * 
+ * @param reg 要写入的目标寄存器地址
+ * @param buffer 指向待写入数据缓冲区的指针
+ * @param length 要写入的数据长度（字节数）
+ */
+
+
+void I2cDevice::WriteRegs(uint8_t reg, uint8_t* buffer, size_t length) {
+    // 更安全的内存处理：使用vector避免内存分配问题
+    std::vector<uint8_t> temp(length + 1);
+    // 第一个字节是寄存器地址
+    temp[0] = reg;
+    // 将数据拷贝到临时缓冲区后续位置
+    std::memcpy(temp.data() + 1, buffer, length);
+    // 发送完整数据（寄存器地址+数据）
+    ESP_ERROR_CHECK(i2c_master_transmit(i2c_device_, temp.data(), temp.size(), 100));
 }
 
 uint8_t I2cDevice::ReadReg(uint8_t reg) {

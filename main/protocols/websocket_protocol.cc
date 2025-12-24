@@ -83,6 +83,8 @@ bool WebsocketProtocol::OpenAudioChannel() {
     Settings settings("websocket", false);
     std::string url = settings.GetString("url");
     std::string token = settings.GetString("token");
+    ESP_LOGI(TAG, "---------> url: %s", url.c_str());
+    ESP_LOGI(TAG, "---------> token: %s", token.c_str());
     int version = settings.GetInt("version");
     if (version != 0) {
         version_ = version;
@@ -103,10 +105,14 @@ bool WebsocketProtocol::OpenAudioChannel() {
             token = "Bearer " + token;
         }
         websocket_->SetHeader("Authorization", token.c_str());
+        ESP_LOGI(TAG, "---------> Authorization: %s", token.c_str());
     }
     websocket_->SetHeader("Protocol-Version", std::to_string(version_).c_str());
     websocket_->SetHeader("Device-Id", SystemInfo::GetMacAddress().c_str());
     websocket_->SetHeader("Client-Id", Board::GetInstance().GetUuid().c_str());
+    ESP_LOGI(TAG, "---------> Protocol-Version: %s", std::to_string(version_).c_str());
+    ESP_LOGI(TAG, "---------> Device-Id: %s", SystemInfo::GetMacAddress().c_str());
+    ESP_LOGI(TAG, "---------> Client-Id: %s", Board::GetInstance().GetUuid().c_str());
 
     websocket_->OnData([this](const char* data, size_t len, bool binary) {
         if (binary) {
@@ -250,4 +256,8 @@ void WebsocketProtocol::ParseServerHello(const cJSON* root) {
     }
 
     xEventGroupSetBits(event_group_handle_, WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT);
+}
+
+bool WebsocketProtocol::IsConnected() const {
+    return websocket_ && websocket_->IsConnected();
 }

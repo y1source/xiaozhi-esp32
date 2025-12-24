@@ -74,6 +74,9 @@ public:
     virtual void SendAbortSpeaking(AbortReason reason);
     virtual void SendMcpMessage(const std::string& message);
 
+    // virtual bool SendText(const std::string& text) = 0;
+    virtual bool IsConnected() const = 0;
+    
 protected:
     std::function<void(const cJSON* root)> on_incoming_json_;
     std::function<void(std::unique_ptr<AudioStreamPacket> packet)> on_incoming_audio_;
