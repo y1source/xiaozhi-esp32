@@ -35,10 +35,11 @@ extern "C" {
 #define BLE_PROTOCOL_ACK_SUCCESS             0x00
 #define BLE_PROTOCOL_ACK_ERROR               0x01
 #define BLE_PROTOCOL_ACK_VERSION_NOT_ALLOW   0x02
+#define BLE_PROTOCOL_ACK_CONNECTING          0x03   // 正在连接中
 
 // 协议相关常量
-#define BLE_PROTOCOL_TIMEOUT_MS              10000   // 10秒超时
-#define BLE_PROTOCOL_MAX_CONN_INTERVAL_MS    150     // 最大连接间隔150ms
+#define BLE_PROTOCOL_TIMEOUT_MS              5000   // 5秒超时
+#define BLE_PROTOCOL_MAX_CONN_INTERVAL_MS    150    // 最大连接间隔150ms
 
 // BLE 服务定义（小智AI自定义协议）
 #define BLE_PROTOCOL_SERVICE_UUID_16         0xFDD0
@@ -49,8 +50,11 @@ extern "C" {
 #define BLE_PROTOCOL_ADV_NAME_PREFIX         "lr_wificfg-"
 
 // 数据包长度限制
-#define BLE_PROTOCOL_MIN_PACKET_LEN          3       // header(2) + cmd(1)
+#define BLE_PROTOCOL_MIN_PACKET_LEN          3      // header(2) + cmd(1)
 #define BLE_PROTOCOL_MAX_PAYLOAD_LEN         (CONFIG_NIMBLE_ATT_PREFERRED_MTU-3)    // 根据BLE MTU限制
+
+// WiFi连接超时时间（毫秒）
+#define BLE_WIFI_CONNECT_TIMEOUT_MS          5000   // 5秒连接超时
 
 // 协议数据包结构
 typedef struct {

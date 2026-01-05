@@ -8,6 +8,8 @@
 #ifdef __cplusplus
 #include <string>
 #include <functional>
+#include <map>
+#include <mutex>
 #endif
 
 #ifdef __cplusplus
@@ -29,6 +31,7 @@ extern "C" {
 // 响应状态
 #define BLE_WIFI_CONFIG_RESP_SUCCESS    BLE_PROTOCOL_ACK_SUCCESS
 #define BLE_WIFI_CONFIG_RESP_ERROR      BLE_PROTOCOL_ACK_ERROR
+#define BLE_WIFI_CONFIG_RESP_CONNECTING BLE_PROTOCOL_ACK_CONNECTING
 
 // 协议相关常量
 #define BLE_WIFI_CONFIG_TIMEOUT_MS      BLE_PROTOCOL_TIMEOUT_MS
@@ -40,6 +43,17 @@ extern "C" {
 
 // 广播名称前缀
 #define BLE_WIFI_CONFIG_ADV_NAME_PREFIX     BLE_PROTOCOL_ADV_NAME_PREFIX
+
+// WiFi连接超时时间
+#define BLE_WIFI_CONFIG_CONNECT_TIMEOUT_MS  BLE_WIFI_CONNECT_TIMEOUT_MS  // 30秒连接超时
+
+// C接口函数声明
+int ble_wifi_config_init(void);
+int ble_wifi_config_start_advertising(const char* ap_ssid, int battery_level, bool charging);
+int ble_wifi_config_stop_advertising(void);
+void ble_wifi_config_deinit(void);
+void ble_wifi_config_disconnect(uint16_t conn_handle);
+void ble_wifi_config_send_result(uint16_t conn_id, const std::string& ssid, bool success);
 
 #ifdef __cplusplus
 }
@@ -56,17 +70,23 @@ public:
     void Disconnect();
     bool IsConnected();
 
-    // 设置回调函数
+    // 设置WiFi配置改变回调（0x01命令使用）
     void SetOnWifiConfigChanged(std::function<void(const std::string&, const std::string&)> callback);
+    
+    // 设置WiFi配置改变回调（0x06命令使用，包含连接ID）
+    void SetOnWifiConfigChangedWithConnId(std::function<void(uint16_t, const std::string&, const std::string&)> callback);
+    
+    // 发送WiFi连接结果
+    void SendWifiConnectResult(uint16_t conn_id, const std::string& ssid, bool success);
+    
+    // 重新启动蓝牙广播
+    bool RestartAdvertising();
     
 private:
     BleWifiConfig() = default;
     ~BleWifiConfig() = default;
     BleWifiConfig(const BleWifiConfig&) = delete;
     BleWifiConfig& operator=(const BleWifiConfig&) = delete;
-    
-    bool initialized_;
-    std::function<void(const std::string&, const std::string&)> wifi_config_callback_;
 };
 
 #endif

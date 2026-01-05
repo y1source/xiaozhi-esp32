@@ -11,6 +11,7 @@
 #include <deque>
 #include <vector>
 #include <memory>
+#include <unordered_set>
 
 #include "protocol.h"
 #include "ota.h"
@@ -29,6 +30,10 @@
 #define MAIN_EVENT_ERROR (1 << 4)
 #define MAIN_EVENT_CHECK_NEW_VERSION_DONE (1 << 5)
 #define MAIN_EVENT_CLOCK_TICK (1 << 6)
+
+// 全局HTTP服务器配置
+extern const char* HTTP_API_WRITE_URL;  // 写入URL
+extern const char* HTTP_API_READ_URL;   // 读取URL
 
 
 enum AecMode {
@@ -76,11 +81,10 @@ public:
     // HTTP 客户端方法
     bool MakeHttpGetRequest(const std::string& url);
     bool MakeHttpPostRequest(const std::string& url, const std::string& json_data);
-
     bool MakeHttpPostRequest(const std::string& metric_name,
                             int metric_value,
                             const std::string& user_id,
-                            const std::string& post_url = "http://172.16.58.108:5000/api/v1/write");
+                            const std::string& post_url = HTTP_API_WRITE_URL);
     esp_err_t HttpEventHandler(esp_http_client_event_t *evt);
     void ProcessHttpResponse(const std::string& response_data);
 
@@ -90,6 +94,11 @@ public:
     // 启动蓝牙配网功能
     void EnableBleWifiConfig(bool enable) { ble_wifi_config_enabled_ = enable; }
     bool IsBleWifiConfigEnabled() const { return ble_wifi_config_enabled_; }
+
+    // 表情容量编码相关方法
+    bool HasCapacityEncoding(const std::string& encoding) const;
+    const std::unordered_set<std::string>& GetCapacityEncodings() const { return capacity_encodings_; }
+    void ClearCapacityEncodings() { capacity_encodings_.clear(); }
 
 private:
     Application();
@@ -123,6 +132,9 @@ private:
     bool MakeHttpRequest(const std::string& url, const std::string& method, const std::string& content_type, const std::string& body);
     std::string current_http_response;
     bool ble_wifi_config_enabled_ = true;
+
+    // 存储从服务器获取的capacity_encoding值
+    std::unordered_set<std::string> capacity_encodings_;
 };
 
 

@@ -33,6 +33,14 @@
 #define TAG "Application"
 
 
+// 全局HTTP服务器配置
+// const char* HTTP_SERVER_IP = "47.116.117.182";
+// const int HTTP_SERVER_PORT = 5000;
+// const char* HTTP_SERVER_BASE_URL = "http://47.116.117.182:5000";
+const char* HTTP_API_WRITE_URL = "http://47.116.117.182:5000/api/v1/write";
+const char* HTTP_API_READ_URL = "http://47.116.117.182:5000/api/v1/read";
+
+
 static const char* const STATE_STRINGS[] = {
     "unknown",
     "starting",
@@ -451,7 +459,9 @@ void Application::Start() {
         if (c == ':') device_id += "%3A";
         else device_id += c;
     }
-    std::string get_url = "http://172.16.58.108:5000/api/v1/read/" + device_id;
+
+    // 使用完整的API读取URL
+    std::string get_url = std::string(HTTP_API_READ_URL) + "/" + device_id;
     MakeHttpGetRequest(get_url);
 
 
@@ -1382,16 +1392,97 @@ void Application::ProcessHttpResponse(const std::string& response_data) {
             }
         }
         
-        // 提取data字段
+        // 提取data字段（现在是一个数组）
         cJSON *data = cJSON_GetObjectItem(json, "data");
-        if (data && cJSON_IsObject(data)) {
+        if (data && cJSON_IsArray(data)) {
+            ESP_LOGI(TAG, "Response data array (size: %d):", cJSON_GetArraySize(data));
+            
+            // 清空之前的容量编码列表
+            capacity_encodings_.clear();
+            
+            // 遍历数组中的每个元素
+            int array_size = cJSON_GetArraySize(data);
+            for (int i = 0; i < array_size; i++) {
+                cJSON *item = cJSON_GetArrayItem(data, i);
+                if (item && cJSON_IsObject(item)) {
+                    ESP_LOGI(TAG, "  Item %d:", i + 1);
+                    
+                    // 获取各个字段
+                    cJSON *capacity_encoding = cJSON_GetObjectItem(item, "capacity_encoding");
+                    cJSON *capacity_name = cJSON_GetObjectItem(item, "capacity_name");
+                    cJSON *hint_text = cJSON_GetObjectItem(item, "hint_text");
+                    cJSON *operation_date = cJSON_GetObjectItem(item, "operation_date");
+                    cJSON *user_id = cJSON_GetObjectItem(item, "user_id");
+                    
+                    if (cJSON_IsString(capacity_encoding) && capacity_encoding->valuestring) {
+                        std::string encoding_str = capacity_encoding->valuestring;
+                        ESP_LOGI(TAG, "    capacity_encoding: %s", encoding_str.c_str());
+                        
+                        // 将capacity_encoding保存到全局集合中
+                        capacity_encodings_.insert(encoding_str);
+                    }
+                    
+                    if (cJSON_IsString(capacity_name) && capacity_name->valuestring) {
+                        ESP_LOGI(TAG, "    capacity_name: %s", capacity_name->valuestring);
+                    }
+                    
+                    if (cJSON_IsString(hint_text) && hint_text->valuestring) {
+                        ESP_LOGI(TAG, "    hint_text: %s", hint_text->valuestring);
+                    } else if (cJSON_IsNull(hint_text)) {
+                        ESP_LOGI(TAG, "    hint_text: null");
+                    }
+                    
+                    if (cJSON_IsNumber(operation_date)) {
+                        ESP_LOGI(TAG, "    operation_date: %d", operation_date->valueint);
+                    }
+                    
+                    if (cJSON_IsString(user_id) && user_id->valuestring) {
+                        ESP_LOGI(TAG, "    user_id: %s", user_id->valuestring);
+                    }
+                    
+                    // // 检查是否是摇晃数据
+                    // if (capacity_encoding && cJSON_IsString(capacity_encoding) && 
+                    //     strcmp(capacity_encoding->valuestring, "shake") == 0) {
+                    //     ESP_LOGI(TAG, "    [检测到摇晃记录]");
+                        
+                    //     // 如果有操作日期信息，可以更新本地存储
+                    //     if (operation_date && cJSON_IsNumber(operation_date) && 
+                    //         operation_date->valueint > 0) {
+                    //         ESP_LOGI(TAG, "    今日已摇晃: %d次", operation_date->valueint);
+                    //     }
+                    // }
+                }
+            }
+
+            /*// 检查是否存在"shake"类型的编码
+            if (Application::GetInstance().HasCapacityEncoding("shake")) {
+                ESP_LOGI("OtherClass", "摇晃功能已启用");
+            }
+
+            // 检查是否存在"stroke"类型的编码
+            if (Application::GetInstance().HasCapacityEncoding("stroke")) {
+                ESP_LOGI("OtherClass", "抚摸功能已启用");
+            }
+
+            // 获取所有编码
+            const auto& encodings = Application::GetInstance().GetCapacityEncodings();
+            for (const auto& encoding : encodings) {
+                ESP_LOGI("OtherClass", "可用的编码: %s", encoding.c_str());
+            }*/
+            
+            // 打印所有保存的capacity_encoding值
+            ESP_LOGI(TAG, "Saved capacity encodings (%zu total):", capacity_encodings_.size());
+            for (const auto& encoding : capacity_encodings_) {
+                ESP_LOGI(TAG, "  - %s", encoding.c_str());
+            }
+        } else if (data && cJSON_IsObject(data)) {
+            // 如果data是对象而不是数组，保留原来的处理逻辑
             ESP_LOGI(TAG, "Response data fields:");
             
             // 遍历所有数据字段
             cJSON *child = data->child;
             while (child) {
                 if (cJSON_IsString(child) && child->valuestring) {
-                    // ESP_LOGI(TAG, "  %s: %s", child->string, child->valuestring);
                     ESP_LOGI(TAG, "  %*s: %s", 20, child->string, child->valuestring);
                     
                     // 检查data对象中是否也有current_date字段
@@ -1404,19 +1495,30 @@ void Application::ProcessHttpResponse(const std::string& response_data) {
                         }
                     }
                 } else if (cJSON_IsNumber(child)) {
-                    // ESP_LOGI(TAG, "  %s: %d", child->string, child->valueint);
                     ESP_LOGI(TAG, "  %*s: %d", 20, child->string, child->valueint);
                 } else if (cJSON_IsBool(child)) {
-                    // ESP_LOGI(TAG, "  %s: %s", child->string, cJSON_IsTrue(child) ? "true" : "false");
                     ESP_LOGI(TAG, "  %*s: %s", 20, child->string, cJSON_IsTrue(child) ? "true" : "false");
                 }
                 child = child->next;
             }
+        } else if (data) {
+            ESP_LOGW(TAG, "Data field is neither array nor object");
         }
         cJSON_Delete(json);
     } else {
         ESP_LOGI(TAG, "Response is not valid JSON or parse failed");
     }
+}
+
+/**
+ * @brief 检查是否存在特定的capacity_encoding
+ * 
+ * @param encoding 要检查的编码字符串
+ * @return true 存在
+ * @return false 不存在
+ */
+bool Application::HasCapacityEncoding(const std::string& encoding) const {
+    return capacity_encodings_.find(encoding) != capacity_encodings_.end();
 }
 
 /**
