@@ -10,6 +10,7 @@
 #include <freertos/task.h>
 #include <esp_network.h>
 #include <esp_log.h>
+#include <esp_wifi.h>
 
 #include <font_awesome.h>
 #include <wifi_station.h>
@@ -38,22 +39,46 @@ void WifiBoard::EnterWifiConfigMode() {
 
     auto& wifi_ap = WifiConfigurationAp::GetInstance();
     wifi_ap.SetLanguage(Lang::CODE);
-    wifi_ap.SetSsidPrefix("Xiaozhi");
+    wifi_ap.SetSsidPrefix(GetBoardType());
     wifi_ap.Start();
 
-    // 等待 1.5 秒显示开发板信息
-    vTaskDelay(pdMS_TO_TICKS(1500));
+    // 设置WiFi模式为STA（仅工作站模式）
+    esp_wifi_set_mode(WIFI_MODE_STA);
 
-    // 显示 WiFi 配置 AP 的 SSID 和 Web 服务器 URL
-    std::string hint = Lang::Strings::CONNECT_TO_HOTSPOT;
-    hint += wifi_ap.GetSsid();
-    hint += Lang::Strings::ACCESS_VIA_BROWSER;
-    hint += wifi_ap.GetWebServerUrl();
+    // // 等待 1.5 秒显示开发板信息
+    // vTaskDelay(pdMS_TO_TICKS(1500));
+
+    // ========== 启动蓝牙配网 ==========
+    std::string hint;
+
+    bool ble_started = BleWifiIntegration::StartBleWifiConfig();
+    if (ble_started) {
+        /*// 如果蓝牙配网启动成功，显示双重配网提示
+        hint = "请使用任一种方式配网：";
+        hint += "1. 开启蓝牙，使用手机小程序进行配网 ";
+        hint += "2. ";
+        hint += Lang::Strings::CONNECT_TO_HOTSPOT;
+        hint += wifi_ap.GetSsid();
+        hint += Lang::Strings::ACCESS_VIA_BROWSER;
+        hint += wifi_ap.GetWebServerUrl();*/
+
+        ESP_LOGI(TAG, "Bluetooth WiFi configuration started successfully");
+        hint += "请使用小程序进行联网设置";
+    } else {
+        /*// 如果蓝牙配网启动失败，只显示AP配网提示
+        hint = Lang::Strings::CONNECT_TO_HOTSPOT;
+        hint += wifi_ap.GetSsid();
+        hint += Lang::Strings::ACCESS_VIA_BROWSER;
+        hint += wifi_ap.GetWebServerUrl();*/
+
+        ESP_LOGW(TAG, "Failed to start Bluetooth WiFi configuration, continuing with AP mode only");
+    }
+
     hint += "\n\n";
     
     // 播报配置 WiFi 的提示
-    application.Alert(Lang::Strings::WIFI_CONFIG_MODE, hint.c_str(), "gear", Lang::Sounds::OGG_WIFICONFIG);
-
+    application.Alert(Lang::Strings::WIFI_CONFIG_MODE, hint.c_str(), "sad", Lang::Sounds::OGG_WIFICONFIG);
+    
     #if CONFIG_USE_ACOUSTIC_WIFI_PROVISIONING
     auto display = Board::GetInstance().GetDisplay();
     auto codec = Board::GetInstance().GetAudioCodec();
@@ -84,10 +109,10 @@ void WifiBoard::StartNetwork() {
 
     // /* add << */
     // // 直接指定要连接的WiFi名称和密码
-    // // const std::string target_ssid = "YTO-GUEST";
-    // // const std::string target_password = "yto.net.cn";
-    // const std::string target_ssid = "YTO";
-    // const std::string target_password = "yto#20000528";
+    // const std::string target_ssid = "YTO-GUEST";
+    // const std::string target_password = "yto.net.cn";
+    // // const std::string target_ssid = "YTO";
+    // // const std::string target_password = "yto#20000528";
     // // 检查目标网络是否已存在
     // bool target_exists = false;
     // // 检查并移除所有非目标网络
@@ -114,11 +139,14 @@ void WifiBoard::StartNetwork() {
         return;
     }
 
+    // 获取 WifiStation 的单例实例
     auto& wifi_station = WifiStation::GetInstance();
+    // 设置扫描开始时的回调函数：显示"扫描WiFi"通知，持续30秒
     wifi_station.OnScanBegin([this]() {
         auto display = Board::GetInstance().GetDisplay();
         display->ShowNotification(Lang::Strings::SCANNING_WIFI, 30000);
     });
+    // 设置开始连接时的回调函数：显示"正在连接到[SSID]..."通知
     wifi_station.OnConnect([this](const std::string& ssid) {
         auto display = Board::GetInstance().GetDisplay();
         std::string notification = Lang::Strings::CONNECT_TO;
@@ -126,18 +154,22 @@ void WifiBoard::StartNetwork() {
         notification += "...";
         display->ShowNotification(notification.c_str(), 30000);
     });
+    // 设置连接成功时的回调函数：显示"已连接到[SSID]"通知
     wifi_station.OnConnected([this](const std::string& ssid) {
         auto display = Board::GetInstance().GetDisplay();
         std::string notification = Lang::Strings::CONNECTED_TO;
         notification += ssid;
         display->ShowNotification(notification.c_str(), 30000);
     });
+    // 启动 WiFi 连接过程（开始扫描并连接）
     wifi_station.Start();
 
+    // 等待 WiFi 连接，超时时间60秒（60 * 1000 毫秒）
     // Try to connect to WiFi, if failed, launch the WiFi configuration AP
     if (!wifi_station.WaitForConnected(60 * 1000)) {
-        wifi_station.Stop();
-        wifi_config_mode_ = true;
+        // 连接失败的处理逻辑
+        wifi_station.Stop();        // 停止 WiFi 站模式
+        wifi_config_mode_ = true;   // 设置配置模式标志
         EnterWifiConfigMode();
         return;
     }

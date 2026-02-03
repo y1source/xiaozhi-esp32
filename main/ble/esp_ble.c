@@ -279,10 +279,10 @@ static int gatt_svc_access(uint16_t conn_handle, uint16_t attr_handle,
     switch (ctxt->op) {
     case BLE_GATT_ACCESS_OP_READ_CHR:
         if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
-            MODLOG_DFLT(INFO, "Characteristic read; conn_handle=%d attr_handle=%d\n",
+            MODLOG_DFLT(INFO, "Characteristic read; conn_handle=%d attr_handle=%d",
                         conn_handle, attr_handle);
         } else {
-            MODLOG_DFLT(INFO, "Characteristic read by NimBLE stack; attr_handle=%d\n",
+            MODLOG_DFLT(INFO, "Characteristic read by NimBLE stack; attr_handle=%d",
                         attr_handle);
         }
         // 对于读操作，返回空数据
@@ -331,10 +331,10 @@ static int gatt_svc_access(uint16_t conn_handle, uint16_t attr_handle,
 
     case BLE_GATT_ACCESS_OP_READ_DSC:
         if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
-            MODLOG_DFLT(INFO, "Descriptor read; conn_handle=%d attr_handle=%d\n",
+            MODLOG_DFLT(INFO, "Descriptor read; conn_handle=%d attr_handle=%d",
                         conn_handle, attr_handle);
         } else {
-            MODLOG_DFLT(INFO, "Descriptor read by NimBLE stack; attr_handle=%d\n",
+            MODLOG_DFLT(INFO, "Descriptor read by NimBLE stack; attr_handle=%d",
                         attr_handle);
         }
         rc = BLE_ATT_ERR_READ_NOT_PERMITTED;
@@ -358,14 +358,14 @@ void gatts_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
 
     switch (ctxt->op) {
     case BLE_GATT_REGISTER_OP_SVC:
-        MODLOG_DFLT(INFO, "registered service %s with handle=%d\n",
+        MODLOG_DFLT(INFO, "registered service %s with handle=%d",
                     ble_uuid_to_str(ctxt->svc.svc_def->uuid, buf),
                     ctxt->svc.handle);
         break;
 
     case BLE_GATT_REGISTER_OP_CHR:
         MODLOG_DFLT(INFO, "registering characteristic %s with "
-                    "def_handle=%d val_handle=%d\n",
+                    "def_handle=%d val_handle=%d",
                     ble_uuid_to_str(ctxt->chr.chr_def->uuid, buf),
                     ctxt->chr.def_handle,
                     ctxt->chr.val_handle);
@@ -373,7 +373,7 @@ void gatts_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg)
         break;
 
     case BLE_GATT_REGISTER_OP_DSC:
-        MODLOG_DFLT(INFO, "registering descriptor %s with handle=%d\n",
+        MODLOG_DFLT(INFO, "registering descriptor %s with handle=%d",
                     ble_uuid_to_str(ctxt->dsc.dsc_def->uuid, buf),
                     ctxt->dsc.handle);
         break;
@@ -665,7 +665,7 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
 
     case BLE_GAP_EVENT_SUBSCRIBE:
         ESP_LOGI(TAG, "subscribe event; conn_handle=%d attr_handle=%d "
-                "reason=%d prevn=%d curn=%d previ=%d curi=%d\n",
+                "reason=%d prevn=%d curn=%d previ=%d curi=%d",
                 event->subscribe.conn_handle,
                 event->subscribe.attr_handle,
                 event->subscribe.reason,
@@ -790,7 +790,7 @@ int esp_ble_gap_get_mac(uint8_t *p_mac){
 
 static void ble_on_reset(int reason)
 {
-    ESP_LOGE(TAG, "Resetting state; reason=%d\n", reason);
+    ESP_LOGE(TAG, "Resetting state; reason=%d", reason);
 }
 
 static void ble_on_sync(void)
@@ -816,7 +816,7 @@ static void ble_on_sync(void)
     mac[5] |= 0xc0;
     ret = ble_hs_id_set_rnd(mac);
     if(ret){
-        ESP_LOGE(TAG, "ble_hs_id_set_rnd failed: %d,%02x%02x%02x%02x%02x%02x\n", ret,
+        ESP_LOGE(TAG, "ble_hs_id_set_rnd failed: %d,%02x%02x%02x%02x%02x%02x", ret,
                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     }
     /* Make sure we have proper identity address set (public preferred) */
@@ -950,7 +950,7 @@ static int adv_start(void){
     int ret = ble_gap_adv_start(OWN_ADDR_TYPE, NULL, BLE_HS_FOREVER,
                            &adv_params, ble_gap_event, NULL);
     if (ret != 0) {
-        MODLOG_DFLT(ERROR, "error enabling advertisement; ret=%d\n", ret);
+        MODLOG_DFLT(ERROR, "error enabling advertisement; ret=%d", ret);
     }
     
     return ret;
@@ -1046,7 +1046,7 @@ int esp_ble_scan_start(uint16_t scan_interval_ms, uint16_t scan_window_ms, uint1
     ret = ble_gap_disc(OWN_ADDR_TYPE, duration_s==0?BLE_HS_FOREVER:duration_s*1000, &disc_params,
                       ble_gap_event, NULL);
     if (ret != 0) {
-        MODLOG_DFLT(ERROR, "Error initiating GAP discovery procedure; rc=%d\n",
+        MODLOG_DFLT(ERROR, "Error initiating GAP discovery procedure; rc=%d",
                     ret);
     }
     return ret;

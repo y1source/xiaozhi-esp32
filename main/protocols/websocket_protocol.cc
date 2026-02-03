@@ -83,6 +83,10 @@ bool WebsocketProtocol::OpenAudioChannel() {
     Settings settings("websocket", false);
     std::string url = settings.GetString("url");
     std::string token = settings.GetString("token");
+
+    url = "ws://47.116.117.182:8000/";
+    token = "test-token";
+
     ESP_LOGI(TAG, "---------> url: %s", url.c_str());
     ESP_LOGI(TAG, "---------> token: %s", token.c_str());
     int version = settings.GetInt("version");

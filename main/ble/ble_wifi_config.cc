@@ -391,41 +391,6 @@ static int handle_wifi_operation_cmd(uint16_t conn_id, const uint8_t *payload, s
             std::string password((char*)&data[offset], password_len);
             
             ESP_LOGI(TAG, "Setting WiFi config: SSID=%s, password_len=%d", ssid.c_str(), password.length());
-            
-            // // ========== 检查重试次数 ==========
-            // {
-            //     std::lock_guard<std::mutex> lock(g_attempts_mutex);
-            //     auto it = g_wifi_config_attempts.find(conn_id);
-            //     if (it != g_wifi_config_attempts.end()) {
-            //         // 检查是否超过重试间隔
-            //         uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
-            //         if (now - it->second.last_attempt_time < WIFI_CONFIG_RETRY_INTERVAL_MS) {
-            //             ESP_LOGW(TAG, "重试间隔太短，请稍后再试");
-            //             uint8_t retry_too_fast[] = {WIFI_OPT_SET_SSID, 0x04}; // 自定义错误码：重试过快
-            //             return ble_protocol_send_response(conn_id, BLE_PROTOCOL_CMD_WIFI_OPT, retry_too_fast, sizeof(retry_too_fast));
-            //         }
-                    
-            //         // 检查是否超过最大重试次数
-            //         if (it->second.retry_count >= MAX_WIFI_CONFIG_RETRIES) {
-            //             ESP_LOGE(TAG, "超过最大重试次数(%d)，请检查网络配置", MAX_WIFI_CONFIG_RETRIES);
-            //             uint8_t max_retries_exceeded[] = {WIFI_OPT_SET_SSID, 0x05}; // 自定义错误码：超过最大重试次数
-            //             return ble_protocol_send_response(conn_id, BLE_PROTOCOL_CMD_WIFI_OPT, max_retries_exceeded, sizeof(max_retries_exceeded));
-            //         }
-                    
-            //         // 更新重试信息
-            //         it->second.retry_count++;
-            //         it->second.last_attempt_time = now;
-            //         it->second.ssid = ssid;
-            //     } else {
-            //         // 第一次尝试
-            //         wifi_config_attempt_t attempt;
-            //         attempt.conn_id = conn_id;
-            //         attempt.retry_count = 1;
-            //         attempt.last_attempt_time = xTaskGetTickCount() * portTICK_PERIOD_MS;
-            //         attempt.ssid = ssid;
-            //         g_wifi_config_attempts[conn_id] = attempt;
-            //     }
-            // }
 
             // 检查WiFi状态，如果正在连接，先断开
             if (is_wifi_connecting_or_connected()) {
@@ -441,10 +406,6 @@ static int handle_wifi_operation_cmd(uint16_t conn_id, const uint8_t *payload, s
                 ESP_LOGE(TAG, "Failed to send connecting response: %d", ret);
                 return ret;
             }
-            
-            // 保存到SSID管理器
-            auto& ssid_manager = SsidManager::GetInstance();
-            ssid_manager.AddSsid(ssid, password);
             
             // 如果有回调函数，通知WiFi配置改变
             if (g_wifi_config_callback_with_conn_id) {
@@ -899,14 +860,6 @@ void ble_wifi_config_send_result(uint16_t conn_id, const std::string& ssid, bool
         
         // 断开蓝牙连接
         ble_wifi_config_disconnect(conn_id);
-        
-        // 延迟等待连接完全断开
-        vTaskDelay(pdMS_TO_TICKS(500));
-        
-        // 成功连接WiFi，重启设备
-        ESP_LOGI(TAG, "Device is about to reboot...");
-        vTaskDelay(pdMS_TO_TICKS(1500));
-        esp_restart();
     } else {
         // ========== 关键修改：失败时保持蓝牙连接 ==========
         // 不主动断开连接，允许用户立即重新尝试配网

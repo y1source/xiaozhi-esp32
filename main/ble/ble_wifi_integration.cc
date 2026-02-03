@@ -12,6 +12,8 @@
 #include "wifi_configuration_ap.h"
 #include "board.h"
 #include "esp_timer.h"
+#include <ssid_manager.h>
+#include "system_info.h"
 
 static const char* TAG = "BLE_WIFI_INTEGRATION";
 
@@ -180,21 +182,21 @@ static void OnWifiConfigChangedWithConnId(uint16_t conn_id, const std::string& s
     // 尝试连接到新的WiFi网络
     auto& wifi_ap = WifiConfigurationAp::GetInstance();
     bool connected = wifi_ap.ConnectToWifi(ssid, password);
-    
+
     // 发送连接结果给APP
     auto& ble_wifi_config = BleWifiConfig::GetInstance();
     ble_wifi_config.SendWifiConnectResult(conn_id, ssid, connected);
     
     if (connected) {
         ESP_LOGI(TAG, "Successfully connected to WiFi: %s", ssid.c_str());
+        
+        // ========== 只在连接成功后才保存到SSID管理器 ==========
+        auto& ssid_manager = SsidManager::GetInstance();
+        ssid_manager.AddSsid(ssid, password);
+        ESP_LOGI(TAG, "Saved WiFi credentials to SSID manager after successful connection");
 
         // 连接成功后，可以选择停止蓝牙配网以节省资源
         StopBleWifiConfig();
-        
-        // 同时清理BLE OTA服务
-        auto& ble_ota = BleOta::GetInstance();
-        ble_ota.Deinitialize();
-        ESP_LOGI(TAG, "BLE OTA service deinitialized");
         
         ESP_LOGI(TAG, "Restarting in 1 second");
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -233,14 +235,21 @@ static void update_adv(void){
     last_battery_level = battery_level;
     last_charging = charging;
 
-    auto& wifi_ap = WifiConfigurationAp::GetInstance();
-    std::string ap_ssid = wifi_ap.GetSsid();
+    // auto& wifi_ap = WifiConfigurationAp::GetInstance();
+    // std::string ap_ssid = wifi_ap.GetSsid();
+
+    // 将设备ID设置为蓝牙名称后缀，并去掉“:”
+    std::string device_id;
+    for (char c : SystemInfo::GetMacAddress()) {
+        if (c == ':') device_id += "";
+        else device_id += c;
+    }
     
     ble_wifi_config.StopAdvertising();
     vTaskDelay(pdMS_TO_TICKS(100));
-    ble_wifi_config.StartAdvertising(ap_ssid, battery_level, charging);
+    ble_wifi_config.StartAdvertising(device_id, battery_level, charging);
 
-    ESP_LOGI(TAG, "Advertising name: lr_wificfg-%s", ap_ssid.c_str());
+    ESP_LOGI(TAG, "Advertising name: lr_wificfg-%s", device_id.c_str());
 }
 
 // 启动蓝牙配网功能

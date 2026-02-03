@@ -11,7 +11,6 @@
 #include <esp_log.h>
 
 #include <driver/i2c_master.h>
-#include <driver/i2c.h>
 #include "i2c_device.h"
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
@@ -491,6 +490,7 @@ private:
                             !WifiStation::GetInstance().IsConnected()) {
                         board.ResetWifiConfiguration();
                     } else {
+                        ESP_LOGI(TAG, "==========================> touch_event_task --> touch_event == Cst816s::TOUCH_RELEASE");
                         app.ToggleChatState();
                     }
                 }
@@ -584,6 +584,7 @@ private:
                 ResetWifiConfiguration();
             }
             app.ToggleChatState();
+            // ResetWifiConfiguration();
         });
         gpio_config_t power_gpio_config = {
             .pin_bit_mask = (BIT64(POWER_CTRL)),
@@ -600,7 +601,7 @@ public:
     {
         InitializeI2c();
         uint8_t pcb_verison = DetectPcbVersion();
-        InitializeCharge();
+        // InitializeCharge();
         InitializeCst816sTouchPad();
 
         InitializeSensors();  // 新增传感器初始化

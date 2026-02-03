@@ -411,6 +411,8 @@ void Application::Start() {
     esp_timer_start_periodic(clock_timer_handle_, 1000000);
 
 
+    // Check for new assets version
+    CheckAssetsVersion();
 
     if (IsWifiConfigMode() && ble_wifi_config_enabled_) {
         BleWifiIntegration::StartBleWifiConfig();
@@ -465,9 +467,6 @@ void Application::Start() {
     MakeHttpGetRequest(get_url);
 
 
-
-    // Check for new assets version
-    CheckAssetsVersion();
 
     // Check for new firmware version or get the MQTT broker address
     Ota ota;

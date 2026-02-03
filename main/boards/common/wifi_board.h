@@ -2,6 +2,7 @@
 #define WIFI_BOARD_H
 
 #include "board.h"
+#include "ble_wifi_integration.h"
 
 class WifiBoard : public Board {
 protected:

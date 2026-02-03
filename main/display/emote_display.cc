@@ -22,6 +22,7 @@
 // Project headers
 #include "assets.h"
 #include "assets/lang_config.h"
+#include "application.h"
 #include "board.h"
 #include "gfx.h"
 
@@ -44,7 +45,6 @@ static const char* TAG = "EmoteDisplay";
 
 // Icon Names - Centralized Management
 #define ICON_MIC                 "icon_mic"
-#define ICON_BATTERY             "icon_Battery"
 #define ICON_SPEAKER_ZZZ         "icon_speaker_zzz"
 #define ICON_WIFI_FAILED         "icon_WiFi_failed"
 #define ICON_WIFI_OK             "icon_wifi"
@@ -135,6 +135,7 @@ public:
 
     void SetEyes(const std::string &emoji_name, const bool repeat, const int fps, EmoteDisplay* const display);
     void SetIcon(const std::string &icon_name, EmoteDisplay* const display);
+    void ClearIcon();
 
     void* GetEngineHandle() const
     {
@@ -252,7 +253,7 @@ static void SetupUI(const gfx_handle_t engine_handle, EmoteDisplay* const displa
     g_obj_label_clock = gfx_label_create(engine_handle);
     gfx_obj_align(g_obj_label_clock, GFX_ALIGN_TOP_MID, 0, 15);
     gfx_obj_set_size(g_obj_label_clock, 200, 50);
-    gfx_label_set_text(g_obj_label_clock, "--:--");
+    gfx_label_set_text(g_obj_label_clock, "");
     gfx_label_set_color(g_obj_label_clock, GFX_COLOR_HEX(0xFFFFFF));
     gfx_label_set_text_align(g_obj_label_clock, GFX_TEXT_ALIGN_CENTER);
     gfx_label_set_font(g_obj_label_clock, (gfx_font_t)&BUILTIN_TEXT_FONT);
@@ -352,10 +353,22 @@ void EmoteEngine::SetIcon(const std::string &icon_name, EmoteDisplay* const disp
         g_icon_img_dsc.data_size = icon_data.size - sizeof(gfx_image_header_t);
 
         gfx_img_set_src(g_obj_img_status, &g_icon_img_dsc);
+        gfx_obj_set_visible(g_obj_img_status, true);
     } else {
         ESP_LOGW(TAG, "SetIcon: No icon data found for %s", icon_name.c_str());
     }
     g_current_icon_type = icon_name;
+}
+
+void EmoteEngine::ClearIcon()
+{
+    if (!engine_handle_) {
+        ESP_LOGE(TAG, "ClearIcon: engine_handle_ is nullptr");
+        return;
+    }
+    
+    gfx_obj_set_visible(g_obj_img_status, false);
+    g_current_icon_type = "";
 }
 
 bool EmoteEngine::OnFlushIoReady(const esp_lcd_panel_io_handle_t panel_io,
@@ -443,7 +456,8 @@ void EmoteDisplay::SetStatus(const char* const status)
         engine_->SetIcon(ICON_MIC, this);
     } else if (std::strcmp(status, Lang::Strings::STANDBY) == 0) {
         SetUIDisplayMode(UIDisplayMode::SHOW_TIME, this);
-        engine_->SetIcon(ICON_BATTERY, this);
+        // engine_->SetIcon(ICON_BATTERY, this);
+        engine_->ClearIcon();
     } else if (std::strcmp(status, Lang::Strings::SPEAKING) == 0) {
         SetUIDisplayMode(UIDisplayMode::SHOW_TIPS, this);
         engine_->SetIcon(ICON_SPEAKER_ZZZ, this);
@@ -471,13 +485,13 @@ void EmoteDisplay::ShowNotification(const char* notification, int duration_ms)
 
 void EmoteDisplay::UpdateStatusBar(bool update_all)
 {
+    auto& app = Application::GetInstance();
     if (!engine_) {
         return;
     }
 
-    // Only display time when battery icon is shown
     DisplayLockGuard lock(this);
-    if (g_current_icon_type == ICON_BATTERY) {
+    if (app.GetDeviceState() == kDeviceStateIdle) {
         time_t now;
         struct tm timeinfo;
         time(&now);
@@ -489,7 +503,6 @@ void EmoteDisplay::UpdateStatusBar(bool update_all)
         char time_str[6];
         snprintf(time_str, sizeof(time_str), "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
 
-        DisplayLockGuard lock(this);
         gfx_label_set_text(g_obj_label_clock, time_str);
         SetUIDisplayMode(UIDisplayMode::SHOW_TIME, this);
     }
@@ -633,7 +646,7 @@ void* EmoteDisplay::GetEngineHandle() const
 void EmoteDisplay::InitializeEngine(const esp_lcd_panel_handle_t panel, const esp_lcd_panel_io_handle_t panel_io,
                                     const int width, const int height)
 {
-    engine_ = std::make_unique<EmoteEngine>(panel, panel_io, width, height, this);
+        engine_ = std::make_unique<EmoteEngine>(panel, panel_io, width, height, this);
 }
 
 bool EmoteDisplay::Lock(const int timeout_ms)
